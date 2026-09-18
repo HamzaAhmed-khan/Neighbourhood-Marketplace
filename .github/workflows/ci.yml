@@ -1,0 +1,88 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  # NEW: Fast-fail Linting Job
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend Linting (ESLint)
+        run: |
+          cd frontend
+          npm install --only=dev
+          npm run lint --if-present
+
+  backend-tests:
+    needs: lint # Only run if linting passes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install backend deps
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run backend tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: |
+          cd backend
+          pytest
+
+  frontend-build:
+    needs: lint # Only run if linting passes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Ensure frontend bin permissions
+        run: |
+          cd frontend
+          chmod -R u+rX node_modules/.bin || true
+          ls -la node_modules/.bin || true
+
+      - name: Debug node & npm & bin dir
+        run: |
+          cd frontend
+          node -v
+          npm -v
+          ls -la node_modules/.bin || true
+          stat node_modules/.bin/vite || true
+          which vite || true
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
