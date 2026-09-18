@@ -1,0 +1,250 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { servicesAPI } from '../services/api';
+import { Card, Button, Input, Modal, LoadingSpinner, EmptyState, Badge, Skeleton } from '../components/UIComponents';
+import { Plus, Edit2, Trash2, Package } from 'lucide-react';
+
+const MyServicesPage = () => {
+    const { user, handleLogout } = useOutletContext();
+    const [services, setServices] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingService, setEditingService] = useState(null);
+    const [formData, setFormData] = useState({
+        title: '',
+        description: '',
+        category: 'teaching',
+        price: '',
+        latitude: null,
+        longitude: null,
+    });
+    const navigate = useNavigate();
+
+    const categories = ['teaching', 'repair', 'rental', 'consulting', 'other'];
+
+    useEffect(() => {
+        if (user) {
+            fetchData();
+        }
+    }, [user]);
+
+    const fetchData = async () => {
+        try {
+            const servicesData = await servicesAPI.list({ provider_id: user.id });
+            setServices(servicesData);
+        } catch (error) {
+            console.error('Failed to fetch data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = async () => {
+        try {
+            if (!formData.price || parseFloat(formData.price) <= 0) {
+                alert('Please enter a valid price greater than 0');
+                return;
+            }
+
+            if (editingService) {
+                await servicesAPI.update(editingService.id, formData);
+            } else {
+                const payload = {
+                    ...formData,
+                    price: parseFloat(formData.price)
+                };
+                await servicesAPI.create(payload);
+            }
+            setShowModal(false);
+            setEditingService(null);
+            setFormData({ title: '', description: '', category: 'teaching', price: '' });
+            fetchData();
+        } catch (error) {
+            alert(error.message);
+        }
+    };
+
+    const handleEdit = (service) => {
+        setEditingService(service);
+        setFormData({
+            title: service.title,
+            description: service.description,
+            category: service.category,
+            price: service.price,
+        });
+        setShowModal(true);
+    };
+
+    const handleDelete = async (serviceId) => {
+        if (!confirm('Are you sure you want to delete this service?')) return;
+
+        try {
+            await servicesAPI.delete(serviceId);
+            fetchData();
+        } catch (error) {
+            alert(error.message);
+        }
+    };
+
+    if (loading || !user) {
+        return (
+            <div className="container">
+                <div className="mb-8 flex items-center justify-between">
+                    <div>
+                        <Skeleton height={40} width={250} className="mb-2" />
+                        <Skeleton height={20} width={180} />
+                    </div>
+                    <Skeleton height={44} width={140} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <Card key={i}>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-start">
+                                    <Skeleton height={24} width="60%" />
+                                    <Skeleton height={20} width={60} />
+                                </div>
+                                <Skeleton height={20} width={80} />
+                                <div className="space-y-2">
+                                    <Skeleton height={12} width="100%" />
+                                    <Skeleton height={12} width="100%" />
+                                    <Skeleton height={12} width="40%" />
+                                </div>
+                                <div className="flex gap-2">
+                                    <Skeleton height={36} className="flex-1" />
+                                    <Skeleton height={36} className="flex-1" />
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="container">
+            {/* Header */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 flex items-center justify-between"
+            >
+                <div>
+                    <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                        My Services
+                    </h1>
+                    <p style={{ color: 'var(--color-text-secondary)' }}>
+                        Manage your service listings
+                    </p>
+                </div>
+                <Button variant="primary" icon={Plus} onClick={() => { setEditingService(null); setFormData({ title: '', description: '', category: 'teaching', price: '' }); setShowModal(true); }}>
+                    Add Service
+                </Button>
+            </motion.div>
+
+            {/* Services Grid */}
+            {services.length === 0 ? (
+                <EmptyState
+                    icon={Package}
+                    title="No services yet"
+                    description="Create your first service to start offering your skills to the community"
+                    action={<Button variant="primary" icon={Plus} onClick={() => setShowModal(true)}>Create Service</Button>}
+                />
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {services.map((service, index) => (
+                        <motion.div key={service.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+                            <Card>
+                                <div className="space-y-3">
+                                    <div className="flex items-start justify-between">
+                                        <h3 className="text-lg font-bold" style={{ color: 'var(--color-text-primary)' }}>
+                                            {service.title}
+                                        </h3>
+                                        <Badge variant={service.state === 'active' ? 'success' : 'warning'}>
+                                            {service.state}
+                                        </Badge>
+                                    </div>
+                                    <Badge variant="info">{service.category}</Badge>
+                                    <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                                        {service.description}
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <Button variant="secondary" size="sm" icon={Edit2} className="flex-1" onClick={() => handleEdit(service)}>
+                                            Edit
+                                        </Button>
+                                        <Button variant="danger" size="sm" icon={Trash2} className="flex-1" onClick={() => handleDelete(service.id)}>
+                                            Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Card>
+                        </motion.div>
+                    ))}
+                </div>
+            )}
+
+            {/* Add/Edit Service Modal */}
+            <AnimatePresence>
+                {showModal && (
+                    <Modal
+                        isOpen={showModal}
+                        onClose={() => { setShowModal(false); setEditingService(null); setFormData({ title: '', description: '', category: 'teaching', price: '' }); }}
+                        title={editingService ? 'Edit Service' : 'Add New Service'}
+                    >
+                        <div className="space-y-4">
+                            <Input label="Service Title" placeholder="e.g., Math Tutoring" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
+                            <div className="space-y-1">
+                                <label className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Description</label>
+                                <textarea className="input" rows="4" placeholder="Describe your service..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Category</label>
+                                <select className="input" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })}>
+                                    {categories.map(cat => (
+                                        <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <Input label="Price (per hour in USD)" type="number" step="0.01" placeholder="e.g., 25.00" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} />
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>Location (Optional - for search)</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input label="Latitude" type="number" step="0.000001" placeholder="40.7128" value={formData.latitude || ''} onChange={(e) => setFormData({ ...formData, latitude: parseFloat(e.target.value) || null })} />
+                                    <Input label="Longitude" type="number" step="0.000001" placeholder="-74.0060" value={formData.longitude || ''} onChange={(e) => setFormData({ ...formData, longitude: parseFloat(e.target.value) || null })} />
+                                </div>
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                        if (navigator.geolocation) {
+                                            navigator.geolocation.getCurrentPosition(
+                                                (position) => setFormData({ ...formData, latitude: position.coords.latitude, longitude: position.coords.longitude }),
+                                                (error) => alert('Could not get location: ' + error.message)
+                                            );
+                                        } else {
+                                            alert('Geolocation not supported');
+                                        }
+                                    }}
+                                >
+                                    📍 Use My Location
+                                </Button>
+                            </div>
+                            <div className="flex gap-3">
+                                <Button variant="secondary" className="flex-1" onClick={() => { setShowModal(false); setEditingService(null); setFormData({ title: '', description: '', category: 'teaching', price: '' }); }}>
+                                    Cancel
+                                </Button>
+                                <Button variant="primary" className="flex-1" onClick={handleSubmit} disabled={!formData.title || !formData.description || !formData.price}>
+                                    {editingService ? 'Update' : 'Create'}
+                                </Button>
+                            </div>
+                        </div>
+                    </Modal>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+export default MyServicesPage;
